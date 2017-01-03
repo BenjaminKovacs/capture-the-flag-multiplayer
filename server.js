@@ -136,8 +136,8 @@ function isCinView(circle, view){
        }
        var cornerDistance = Math.pow((circleDistance.x - view.width/2),2) + Math.pow((circleDistance.y - view.height/2),2);
        return (cornerDistance <= Math.pow(circle.radius,2));
-    }
 }
+
 function isRinView(rectA, view){
 	rectB = view;
 	rectB.x -= rectB.width/2;
@@ -148,7 +148,7 @@ function isRinView(rectA, view){
 function circlesInView(view){
 	var circles = [];
 	for (i = 0; i < circle_list.length; i++){
-		if (isCinView(circle_list[i], view){
+		if (isCinView(circle_list[i], view)){
 			circles.push(circle_list[i]);
 		}
 	}
@@ -157,7 +157,7 @@ function circlesInView(view){
 function rectanglesInView(view){
 	var rectangles = [];
 	for (i = 0; i < rectangle_list.length; i++){
-		if (isRinView(rectangle_list[i], view){
+		if (isRinView(rectangle_list[i], view)){
 			rectangles.push(rectangle_list[i]);
 		}
 	}
