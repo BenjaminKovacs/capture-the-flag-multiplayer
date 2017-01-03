@@ -332,7 +332,7 @@ var visibleRectangleArray;
 var visibleTextArray = [];
 socket.on('update all positions', function(number, left, right, up, down, mouse_x, mouse_y){
 	//set directions and amounts to move here
-	io.to(user_ids[number]).emit('position update (everything)', number, 
+	io.to(user_ids[number]).emit('position update (everything)', number, circlesInView(view[number]), rectanglesInView(view[number]), visibleTextArray, new Date.getTime(), false, 0, view[number]);
 });
 
 socket.on('add to game', function(number){
