@@ -352,6 +352,6 @@ newPlayer(number, start.x, start.y);
 });
 
 
-http.listen(4000, function(){
+app.listen(4000, function(){
 	  console.log('listening on *:4000');
 	});
