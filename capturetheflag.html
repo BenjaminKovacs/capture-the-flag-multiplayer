@@ -1,0 +1,1004 @@
+<head>
+  <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+  <style>
+ body {
+  margin: 0;
+  background: rgb(211, 211, 211);
+}
+
+#capturetheflag {
+  display: flex;
+  -webkit-flex-direction: column;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  align-items: center;
+}
+
+  #capturetheflag span {
+    margin: 10px 0;
+    text-align: center;
+    font-family: Arial;
+    font-size: 18pt;
+    font-weight: bold;
+    background: white;
+  }
+
+  #capturetheflag canvas {
+    background: white;
+  }
+
+#points {
+  display: flex;
+  -webkit-flex-direction: column;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  align-items: right;
+}
+
+#points span {
+    margin: 10px 0;
+    text-align: center;
+    font-family: Arial;
+    font-size: 18pt;
+    font-weight: bold;
+    background: white;
+  }
+
+#points canvas {
+    background: white;
+  }
+
+#score {
+  display: flex;
+  -webkit-flex-direction: column;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  align-items: right;
+}
+
+#score span {
+    margin: 10px 0;
+    text-align: center;
+    font-family: Arial;
+    font-size: 18pt;
+    font-weight: bold;
+    background: white;
+  }
+
+#score canvas {
+    background: white;
+  }
+
+ #controlsettings{
+display: flex;
+  -webkit-flex-direction: column;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  align-items: right;
+}
+ #controlsettings span {
+    margin: 10px 0;
+    text-align: left;
+    font-family: Arial;
+    font-size: 6pt;
+    font-weight: bold;
+    background: white;
+  }
+ </style>
+
+<script> 
+
+var socket = io();
+var userNumber = 0;
+var numberSet = false;
+
+var deltatime;
+var t1;
+var t2;
+var r = false;
+var timer;
+var count = 0;
+var debug;
+
+function sqrt(number){return Math.sqrt(number);}
+function pow(base, exponent){return Math.pow(base, exponent);}
+
+var mouse_x = 0;
+var mouse_y = 0;
+var mouse_x_scale = mouse_x;
+var mouse_y_scale = mouse_y;
+var mouse_down = false;
+
+var firstMouseDown = true;
+
+window.addEventListener('mousedown', function () {
+mouse_down = true;
+
+if (firstMouseDown){
+	newGame();
+	firstMouseDown = false;
+	}
+
+});
+
+window.addEventListener('mouseup', function () {
+mouse_down = false;
+});
+
+onmousemove = function(e){
+mouse_x = e.clientX;
+mouse_y = e.clientY;
+
+mouse_x_scale = mouse_x;
+mouse_y_scale = mouse_y;
+}
+
+var left;
+var right;
+var up;
+var down;
+keysPressed = [];
+for (i=0; i < 193; i++){keysPressed[i]=false;}
+
+function resetPressedKeys(){
+for (i=0; i < 193; i++){keysPressed[i]=false;}
+}
+
+var key;
+window.addEventListener('keydown', function (e) {
+for (i = 8; i < 193; i++){
+    if (e.keyCode == i){
+     keysPressed[i] = true;
+     }
+}
+if (switchToSettings){
+key = e.keyCode;}
+
+left = keysPressed[37] || keysPressed[65];
+right = keysPressed[39] || keysPressed[68];
+up = keysPressed[38] || keysPressed[87];
+down = keysPressed[40] || keysPressed[83];
+
+});
+window.addEventListener('keyup', function (e) {
+for (i = 8; i < 193; i++){
+    if (e.keyCode == i){
+     keysPressed[i] = false;
+     }
+}
+
+left = keysPressed[37] || keysPressed[65];
+right = keysPressed[39] || keysPressed[68];
+up = keysPressed[38] || keysPressed[87];
+down = keysPressed[40] || keysPressed[83];
+
+});
+
+
+var settings = {
+  gridSize: 1,
+  width: window.innerWidth,
+  height: window.innerHeight
+};
+
+var object_list = [];
+var circle_list = [];
+var rectangle_list = [];
+var player_list = [];
+var C_player_list = [];
+var R_player_list = [];
+var flag_list = [];
+
+class Object{
+    constructor(x,y,team,type){
+/* type =
+   0: background
+   1: defender
+   2: player
+   3: flag
+*/
+       this.x = x;
+       this.y = y;
+       this.team = team;
+       this.type = type;
+       if (type == 1){
+       this.damage = 1;
+       this.upgrades = 0;
+       this.movement_radius = 10;
+       }
+       if (type == 2){
+       this.life = 10;
+       this.health_count = this.life;
+       }
+       if (type == 3){
+       this.value = 0;
+       flag_list.push(this);
+       }
+      
+    }
+}
+class Rectangle extends Object{
+    constructor(x, y, team, type, width, height){
+        super(x,y,team,type);
+        this.width = width;
+        this.height = height;
+	this.index = rectangle_list.length;
+this.shape = "rectangle"; 
+        rectangle_list.push(this);
+    }
+    static touching_rectangle(rectA, rectB){
+    return (rectA.x + rectA.width > rectB.x && rectA.x < rectB.x + rectB.width && rectA.y + rectA.height> rectB.y && rectA.y < rectB.y + rectB.height);    
+    }
+}
+class Circle extends Object{
+    constructor(x, y, team, type, radius){
+        super(x,y,team,type);
+        this.radius = radius;
+	this.index = circle_list.length;
+this.shape = "circle";
+        circle_list.push(this);
+        }
+   
+   static touching_circle(circleA, circleB){
+        if (sqrt(pow((circleA.x - circleB.x),2) + pow((circleA.y - circleB.y),2)) < (circleA.radius + circleB.radius)){
+            return true
+            }
+        else {
+            return false
+        }
+
+     }
+   static r_touching_circle(circle, rectangle){
+       var circleDistance = {};
+       var rectCenter = {};
+       var radius = circle.radius/settings.gridsize
+       rectCenter.x = rectangle.x + rectangle.width/2
+       rectCenter.y = rectangle.y + rectangle.height/2
+       circleDistance.x = Math.abs(circle.x - rectCenter.x)
+       circleDistance.y = Math.abs(circle.y - rectCenter.y)
+       if (circleDistance.x > (rectangle.width/2 + circle.r)) {return false;}
+       if (circleDistance.y > (rectangle.height/2 + circle.r)) {return false;}
+       if (circleDistance.x - circle.radius <= (rectangle.width/2)) {
+           if (circleDistance.y - circle.radius <= (rectangle.height/2)) {
+           return true; } 
+       }
+       var cornerDistance = Math.pow((circleDistance.x - rectangle.width/2),2) + Math.pow((circleDistance.y - rectangle.height/2),2);
+       return (cornerDistance <= Math.pow(circle.radius,2));
+    }
+}
+
+var text_list = [];
+class Text {
+	constructor(x, y, words, font, font_size, visible){
+		this.x = x;
+		this.y = y;
+		this.words = words;
+		this.font = font;
+		this.font_size = font_size;
+		this.visible = visible;
+		text_list.push(this);
+		}
+	}
+
+var enemy_number;
+function touchingEnemyOfType(object, type){
+if (object instanceof Circle){
+//console.log(player1.team);
+//debug = debug + object.team.toString() + type;
+    for (i = 0; i < circle_list.length; i++){
+      if (object.team != circle_list[i].team && Number(circle_list[i].type) == Number(type)){
+            if (Circle.touching_circle(object, circle_list[i])){
+            enemy_number = circle_list[i];
+            return true;
+            }
+        }
+    }
+    for (i = 0; i < rectangle_list.length; i++){
+        if (object.team != rectangle_list[i].team && rectangle_list[i].type == type){
+            if (Circle.r_touching_circle(object, rectangle_list[i])){
+                enemy_number = rectangle_list[i];
+                return true;
+                }
+        }
+    }
+}
+if (object instanceof Rectangle){
+    for (i = 0; i < circle_list.length; i++){
+        if (object.team =! circle_list[i].team){
+            if (Circle.r_touching_circle(circle_list[i], object)){
+                enemy_number = circle_list[i];
+                return true;
+                }
+        }
+    }
+    for (i = 0; i < rectangle_list.length; i++){
+        if (object.team =! rectangle_list[i].team){
+            if (Rectangle.touching_rectangle(rectangle_list[i], object)){
+                enemy_number = rectangle_list[i];
+                return true;
+                }
+        }
+    }
+}
+return false;
+}
+
+function onCanvas(object){
+if (object instanceof Circle){
+   console.log("object is a circle");
+    if (object.x + object.radius > settings.width){return false;}
+    else if(object.x - object.radius < 0){return false;}
+    else if(object.y + object.radius > settings.height){return false;}
+    else if(object.y - object.radius < 0){return false;}
+    else {return true;}
+    }
+else{
+    if (object.x > settings.width){return false;}
+    else if(object.x < 0){return false;}
+    else if(object.y > settings.height){return false;}
+    else if(object.y < 0){return false;}
+    else {return true;}
+    }
+}
+
+function stayOnCanvas(object){
+if (object.x > settings.width){object.x = settings.width;}
+else if(object.x < 0){object.x = 0;}
+else if(object.y > settings.height){object.y = settings.height;}
+else if(object.y < 0){object.y = 0;}
+}
+
+function movePlayer(object, speed, deltatime, left, right, up, down, remainOnCanvas){
+var distance = deltatime * speed;
+var partial_distance = distance / Math.sqrt(2);
+if ((left || right) && (up || down)){
+    if (left){
+    object.x -= partial_distance;
+    }
+    if (right){
+    object.x += partial_distance;
+    }
+    if (up){
+    object.y -= partial_distance;
+    }
+    if (down){
+    object.y += partial_distance;
+    }
+}
+else{
+    if (left){
+    object.x -= distance;
+    }
+    if (right){
+    object.x += distance;
+    }
+    if (up){
+    object.y -= distance;
+    }
+    if (down){
+    object.y += distance;
+    }
+}
+if (remainOnCanvas){stayOnCanvas(object);}
+}
+
+window.addEventListener('load', function () {
+
+var score;
+var wins;
+var points;
+
+  var canvas = document.createElement('canvas');
+  canvas.width = settings.width * settings.gridSize - 1;
+  canvas.height = settings.height * settings.gridSize - 1;
+  canvas.style.width = score.style.width = canvas.width + 'px';
+  canvas.style.height = canvas.height + 'px';
+  context = canvas.getContext('2d');
+
+   $('capturetheflag').style.display = 'flex';
+   $('capturetheflag').style.flexDirection = 'column';
+   $('capturetheflag').appendChild(score);
+   $('other').appendChild(points);
+   $('score').appendChild(wins);
+   $('capturetheflag').appendChild(canvas);
+
+score.innerHTML = 0;
+points.innerHTML = 0;
+
+//add start game button
+
+});
+
+function start() {
+console.log("start");
+timer = 0;
+r = false;
+t1 = new Date().getTime();
+game_over = false;
+stopped = pause = false;
+context.clearRect(0, 0, settings.width * settings.gridSize, settings.height * settings.gridSize);
+start_time = new Date().getTime();
+new_time = start_time;
+resetLocations();
+  tick();
+}
+
+var last = new Date().getTime();
+var fps = 0;
+
+
+function newGame(){
+setUp();
+start();
+socket.emit('add to game', userNumber);
+}
+
+
+function tick() {
+if (!stopped && !pause && !game_over) {
+    count = 0;
+    var time = new Date().getTime();
+    if (time - last > 1000) {
+      last = time;
+      console.log(fps);
+      fps = 0;
+    }
+    fps++;
+    };
+t2 = new Date().getTime();
+deltatime = t2 - t1;
+t1 = t2;
+if (time - new_time > 1000){
+timer++;
+score.innerHTML = timer;
+new_time = new Date().getTime();
+}
+
+if (!game_over){
+changeThings();
+}
+
+if (game_over){
+endGame();
+}
+context.beginPath();
+
+context.clearRect(0, 0, settings.width * settings.gridSize, settings.height * settings.gridSize);
+for (j = 0; j < 4; j++){
+for (i = 0; i < circle_list.length; i++){
+if (circle_list[i].type == j){
+context.moveTo(circle_list[i].x * settings.gridSize, circle_list[i].y * settings.gridSize);
+setColor(circle_list[i]);
+var a = circle_list[i].x * settings.gridSize;
+var b = circle_list[i].y * settings.gridSize;
+var c = circle_list[i].radius * settings.gridSize;
+context.ellipse(a, b, c, c, 0, 2 * Math.PI, false); //why does this work but not the one 2 lines below this?
+context.fill();
+}
+}
+
+for (i = 0; i < rectangle_list.length; i++){
+if (rectangle_list[i].type == j){
+setColor(rectangle_list[i]);
+var a = rectangle_list[i].x * settings.gridSize;
+var b = rectangle_list[i].y * settings.gridSize;
+var c = rectangle_list[i].width * settings.gridSize;
+var d = rectangle_list[i].height * settings.gridSize;
+context.fillRect(a, b, c, d);
+}}
+}
+
+window.requestAnimationFrame(tick);
+
+context.strokeText("left: extra territory  right: speed  up: still defender length  down: moving defender radius", 450, 50);
+//context.strokeText(debug, 50, 100);
+listUpgrades();
+}
+function $(id) {
+  return document.getElementById(id);
+}
+if(window.matchMedia('(max-width: 500px)').matches){var x=new XMLHttpRequest();x.open('GET','/api/useragent/mobile');x.send();location.reload(true);} 
+
+/* type =
+   0: background
+   1: defender
+   2: player
+   3: flag
+*/
+
+var winner = 0;
+
+var numberOfTeams = 0;
+var playerLeft = [];
+var playerRight = [];
+var playerUp = [];
+var playerDown = [];
+
+var backgroundLeft = [];
+var backgroundRight = [];
+var backgroundUp = [];
+var backgroundDown = [];
+
+var colorAdjust = 25;
+function setColor(object){ //needs to be changed for additional teams
+context.closePath();
+context.beginPath();
+if (object.type == 1){
+    context.fillStyle = 'rgb(150, colorAdjust * object.team, 15)';
+}
+if (object.type == 2){
+    context.fillStyle = 'rgb(150, colorAdjust * object.team, 150)';
+}
+if (object.type == 0){
+   context.fillStyle = 'rgb(15, colorAdjust * object.team, 150)';
+}
+}
+if (object.type == 3){
+    if (object.team == -1){
+    	var c = 'rgb('+
+      		Math.floor(Math.random()*256)+','+
+      		Math.floor(Math.random()*256)+','+
+      		Math.floor(Math.random()*256)+')'
+	;
+     	context.fillStyle = c;
+	}
+    else{
+    	context.fillStyle = 'rgb(0, colorAdjust * object.team, 175)';
+    }
+}
+}
+
+
+var additionalMovingDefenders = [];
+var movingDefenderUpgrades = [];
+var stillDefenderUpgrades = [];
+var playerSpeed = [];
+var numberOfDefenseUpgrades = [];
+var speed1 = 1/30;
+var defenderSpeed = 7/30000;
+var background = [];
+var player = [];
+var playerScore = [];
+var movingDefender1 = [];
+var movingDefender2 = [];
+var movingDefender = [[]];
+var movingDirection1;
+var movingDirection2;
+var stillDefender1 = [];
+var stillDefender2 = [];
+var stillDefender3 = [];
+var stillDefender4 = [];
+var flags = [];
+var neutral_flags = [];
+
+
+function upgrade(number){}
+
+
+
+socket.on('setUserNumber', function(users){
+console.log('set user number called');
+	if (!numberSet){
+   		userNumber = users;
+    		console.log('userNumber set to ' + userNumber);
+		numberSet = true;
+	//	socket.emit('waiting for opponent', userNumber);
+		}
+  });
+
+
+
+
+var previous_position_update_received = true;
+function requestPositionUpdate(){
+	if (previous_position_update_received){
+		//console.log('position update requested');
+		socket.emit('update all positions', userNumber, left, right, up, down, mouse_x_scale, mouse_y_scale);
+		previous_position_update_received = false;
+	}
+}
+
+var xscale;
+var yscale;
+socket.on('position update (everything)', function(user, visibleCircleArray, visibleRectangleArray, visibleTextArray, time_sent, upgrade, upgrade_number, view){
+if (userNumber == user){
+
+xscale = settings.width/view.width;
+yscale = settings.height/view.height;
+
+circle_list = visibleCircleArray;
+rectangle_list = visibleRectangleArray;
+text_list = visibleTextArray;
+
+for(i = 0; i < circle_list.length; i++){
+circle_list[i].x -= view.x;
+circle_list[i].y -= view.y;
+
+circle_list[i].x *= xscale;
+circle_list[i].y *= yscale;
+}
+
+for(i = 0; i < rectangle_list.length; i++){
+rectangle_list[i].x -= view.x;
+rectangle_list[i].y -= view.y;
+
+rectangle_list[i].x *= xscale;
+rectangle_list[i].y *= yscale;
+}
+
+for(i = 0; i < text_list.length; i++){
+text_list[i].x -= view.x;
+text_list[i].y -= view.y;
+
+text_list[i].x *= xscale;
+text_list[i].y *= yscale;
+}
+
+if(upgrade){upgrade(upgrade_number);}
+
+
+previous_position_update_received = true;
+
+}
+
+else{
+console.log('ERROR');
+}
+
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+function setUp(){
+
+for (i = 0; i < numberOfTeams; i++){
+background[i] = new Circle(50, 0, i, 0, settings.height/(1.5 * numberOfTeams));
+console.log(background[i].radius);
+//console.log(background[i].team);
+player[i] = new Circle(settings.width - 2, settings.height - 2, i, 2, 1);
+//movingDefender1[i] = new Circle(settings.width - 30, settings.height, i, 1, 1);
+//movingDefender2[i] = new Circle(settings.width - 10, 0, i, 1, 1);
+
+console.log(i);
+movingDefender.push([]);
+movingDefender[i][0] = new Circle(0, 0, i, 1, 1);
+movingDefender[i][0].movement_radius = 4 * (settings.height/numberOfTeams)/9;
+
+movingDirection1 = -1;
+movingDirection2 = 1;
+
+stillDefender1[i] = new Rectangle(settings.width - 40 - 5, settings.height - 0 - 10, i, 1, 3/numberOfTeams, 15/numberOfTeams);
+stillDefender2[i] = new Rectangle(settings.width - 40 - 5, settings.height - 30 - 10, i, 1, 3/numberOfTeams, 15/numberOfTeams);
+stillDefender3[i] = new Rectangle(settings.width - 20 - 5, settings.height - 15 - 10, i, 1, 15/numberOfTeams, 3/numberOfTeams);
+stillDefender4[i] = new Rectangle(settings.width - 20 - 5, settings.height - 15 - 10, i, 1, 15/numberOfTeams, 3/numberOfTeams);
+
+flags[i] = new Circle(settings.width - 1, settings.height/2, i, 3, 0.5);
+
+}
+
+for (i = 0; i < 10 * numberOfTeams; i++){
+neutral_flags[i] = new Circle(10, 10, -1, 3, 0.25);
+}
+
+winner = 0;
+keysPressed[82] = false;
+}
+
+/*
+function getRandomLocation(x, y){
+x = Math.random() * 100; //Number(settings.width);
+console.log('x ' + x);
+y = Math.random() * 55; //Number(settings.height);
+console.log('y ' + y);
+}
+*/
+
+
+function getRandomX(radius){
+var x = Math.random() * (Number(settings.width) - 2 * radius) + radius;
+//console.log('random x: ' + x);
+return x;
+}
+
+function getRandomY(radius){
+var y = Math.random() * (Number(settings.height) - 2 * radius) + radius;
+//console.log('random y: ' + y);
+return y;
+}
+
+var team_score = [];
+
+function isInt(n) {
+   return n % 1 === 0;
+}
+
+var upgradesFor = [];
+function resetLocations(){
+
+for (count = 0; count < numberOfTeams; count++){
+upgradesFor[count] = false;
+playerSpeed[count] = speed1;
+//additionalMovingDefenders[count] = 0;
+stillDefenderUpgrades[count] = 0;
+movingDefenderUpgrades[count] = 0;
+numberOfDefenseUpgrades[count] = 0;
+//console.log('beginning to update position of ' + count);
+  //  alert('on canvas: ' + onCanvas(background[count]));
+team_score[count] = 0;
+while(touchingEnemyOfType(background[count],0) || !onCanvas(background[count])){
+    //alert('on canvas: ' + onCanvas(background[count]));
+   // console.log('attempting to update position of ' + count);
+    var a;
+    var b;
+    a = getRandomX(background[count].radius);
+  //  console.log(a);
+    b = getRandomY(background[count].radius);
+  //  console.log(b);
+    background[count].x = a;
+    background[count].y = b;
+  //  console.log('new x of ' + a);
+  //  console.log('new y of ' + b);
+    }
+//console.log(count + ' position updated');
+stillDefender1[count].x = a - 2/3 * background[count].radius - stillDefender1[count].width;
+stillDefender1[count].y = b - stillDefender1[count].height/2;
+stillDefender2[count].x = a + 2/3 * background[count].radius;
+stillDefender2[count].y = b - stillDefender2[count].height/2;
+stillDefender3[count].x = a - stillDefender3[count].width/2;
+stillDefender3[count].y = b - 2/3 * background[count].radius - stillDefender3[count].height;
+stillDefender4[count].x = a - stillDefender4[count].width/2;
+stillDefender4[count].y = b + 2/3 * background[count].radius - stillDefender4[count].height;
+
+flags[count].x = a;
+flags[count].y = b;
+
+player[count].x = a;
+player[count].y = b;
+
+playerScore[count] = 0;
+}
+
+for (count = 0; count < 10 * numberOfTeams; count++){
+neutral_flags[count].x = getRandomX(neutral_flags[count].radius);
+neutral_flags[count].y = getRandomY(neutral_flags[count].radius);
+while(touchingEnemyOfType(neutral_flags[count], 0) || !onCanvas(neutral_flags[count])){
+//console.log(neutral_flags[count].x);
+//console.log(neutral_flags[count].y);
+neutral_flags[count].x = getRandomX(neutral_flags[count].radius);
+neutral_flags[count].y = getRandomY(neutral_flags[count].radius);
+//console.log(count);
+//console.log(neutral_flags[count].x);
+//console.log(neutral_flags[count].y);
+}
+}
+
+winner = 0;
+keysPressed[82] = false;
+}
+
+var radians = 0;
+function moveDefenders(){
+
+for(count = 0; count < numberOfTeams; count++){
+
+radians += defenderSpeed * deltatime * background[count].radius;
+if (radians > 2 * Math.PI){radians -= 2 * Math.PI;}
+
+for(n = 0; n < movingDefender[count].length; n++){
+if (isInt(n/2)){
+//console.log(radians);
+movingDefender[count][n].x = background[count].x + movingDefender[count][n].movement_radius * Math.cos(radians);
+movingDefender[count][n].y = background[count].y + movingDefender[count][n].movement_radius * Math.sin(radians);
+}
+else{
+//console.log(radians);
+movingDefender[count][n].x = background[count].x + movingDefender[count][n].movement_radius * Math.cos(-radians);
+movingDefender[count][n].y = background[count].y + movingDefender[count][n].movement_radius * Math.sin(-radians);
+}
+}
+}
+
+/*
+movingOrange1.y += speed1 * orange1direction * deltatime;
+if (!onCanvas(movingOrange1)){orange1direction *= -1;
+movingOrange1.y += speed1 * orange1direction * deltatime;}
+
+movingOrange2.y += speed1 * orange2direction * deltatime;
+if (!onCanvas(movingOrange2)){orange2direction *= -1;
+movingOrange2.y += speed1 * orange2direction * deltatime;}
+
+movingGreen1.y += speed1 * green1direction * deltatime;
+if (!onCanvas(movingGreen1)){green1direction *= -1;
+movingGreen1.y += speed1 * green1direction * deltatime;}
+
+movingGreen2.y += speed1 * green2direction * deltatime;
+if (!onCanvas(movingGreen2)){green2direction *= -1;
+movingGreen2.y += speed1 * green2direction * deltatime;}
+*/
+}
+ 
+function movePlayerNumber(player, startX, startY, left, right, up, down){
+movePlayer(player, playerSpeed[player.team], deltatime, left, right, up, down, true);
+//console.log(player.team);
+if (touchingEnemyOfType(player, 1)){
+    player.x = startX;
+    player.y = startY;
+    }
+else if (touchingEnemyOfType(player, 0) && touchingEnemyOfType(player, 2)){
+    player.x = startX;
+    player.y = startY;
+    }
+else if (touchingEnemyOfType(player, 0)){
+    player.time_in_enemy_territory += deltatime;
+    }
+}
+
+
+function movePlayers(){
+for(n = 0; n < numberOfTeams; n++){
+    movePlayerNumber(player[n], background[n].x, background[n].y, keysPressed[playerLeft[n]], keysPressed[playerRight[n]], keysPressed[playerUp[n]], keysPressed[playerDown[n]]);
+    if (team_score[player[n].team] > pow(2, numberOfDefenseUpgrades[player[n].team])){
+        context.strokeText("Upgrade left: extra territory  right: speed  up: still defender length  down: moving defender radius", background[player[n].team].x, background[player[n].team].y);
+        upgradesFor[player[n].team] = true;
+        addDefenses(player[n], keysPressed[backgroundLeft[n]], keysPressed[backgroundRight[n]], keysPressed[backgroundUp[n]], keysPressed[backgroundDown[n]]);
+        }
+    }
+}
+
+function moveBackgrounds(){
+for(n = 0; n < numberOfTeams; n++){
+    movePlayerNumber(background[n], background[n].x, background[n].y, keysPressed[backgroundLeft[n]], keysPressed[backgroundRight[n]], keysPressed[backgroundUp[n]], keysPressed[backgroundDown[n]]);
+    }
+}
+
+function moveFlag(flag){
+
+if (touchingEnemyOfType(flag, 2)){
+    flag.x = enemy_number.x;
+    flag.y = enemy_number.y;
+    console.log(flag.team);
+if (flag.team > -1){
+    if (Circle.touching_circle(flag, background[flag.team])){
+    flag.value = team_score[flag.team]/2;
+    }
+}
+    if (touchingEnemyOfType(flag, 0) && flag.team > -1){
+        team_score[enemy_number.team]+= flag.value;
+        team_score[flag.team]-= flag.value;
+        flag.x = background[flag.team].x;
+        flag.y = background[flag.team].y;
+        }
+    if (touchingEnemyOfType(flag, 0) && flag.team == -1){
+        while(touchingEnemyOfType(flag, 0)){
+            flag.x = getRandomX(flag.radius);
+            flag.y = getRandomY(flag.radius);
+            }
+        team_score[enemy_number.team]++;
+        }
+    }
+
+}
+
+function moveFlags(){
+for(k = 0; k < flag_list.length; k++){
+    moveFlag(flag_list[k]);
+    }
+}
+
+var top_team = 0;
+function highestScoringTeam(){
+for(i = 0; i < numberOfTeams; i++){
+    if(team_score[i] > team_score[top_team]){top_team = i;}
+    }
+return top_team;
+}
+
+var defenseSelectionStep = 0;
+function addDefenses(player, left, right, up, down){
+
+if (!left && !right && ! up && !down){defenseSelectionStep = 1;}
+if (defenseSelectionStep == 1){
+if (left){
+    background[player.team].radius += 3/numberOfTeams;
+    defenseSelectionStep = 2;
+    }
+/*if (right){
+    playerSpeed[player.team]+= 0.01;
+    defenseSelectionStep = 2;
+    }*/
+if (right && (movingDefender[player.team].length + 1) * (settings.height/numberOfTeams)/2 < background[player.team].radius){
+    var length = movingDefender[player.team].length;
+    movingDefender[player.team][length] = new Circle(0, 0, player.team, 1, 1);
+    movingDefender[player.team][length].movement_radius = (settings.height/numberOfTeams) * (length + 1)/2;
+    defenseSelectionStep = 2;
+    }
+console.log(movingDefenderUpgrades[player.team]);
+if (up && stillDefenderUpgrades[player.team] < 5){
+    stillDefender1[player.team].height += 1/numberOfTeams;
+    stillDefender2[player.team].height += 1/numberOfTeams;
+    stillDefender3[player.team].width += 1/numberOfTeams;
+    stillDefender4[player.team].width += 1/numberOfTeams;
+    stillDefenderUpgrades[player.team]++;
+    defenseSelectionStep = 2;
+    }
+if (down && movingDefenderUpgrades[player.team] < 5){
+    movingDefender[player.team][0].radius+= 1/2;
+    movingDefenderUpgrades[player.team]++;
+    defenseSelectionStep = 2;
+    }
+}
+if (defenseSelectionStep == 2){
+defenseSelectionStep = 0;
+upgradesFor[player.team] = false;
+numberOfDefenseUpgrades[player.team]++;
+}
+}
+
+function listUpgrades(){
+for (i = 0; i < numberOfTeams; i++){
+    if (upgradesFor[i]){
+        context.strokeText("you have an upgrade", background[i].x * 10, background[i].y * 10);
+        }
+}
+}
+
+function changeThings(){
+
+context.strokeText("left: extra territory  right: speed  up: still defender length  down: moving defender radius", 450, 50);
+
+if (keysPressed[82]){r = true;
+console.log(r);}
+
+moveDefenders();
+movePlayers();
+moveFlags();
+points.innerHTML = " ";
+for (n = 0; n < numberOfTeams; n++){
+points.innerHTML = points.innerHTML + " Player " + n + " score: " + team_score[n];
+}
+
+//points.innerHTML = "Green: " + (player2.time_in_enemy_territory/1000).toFixed(1) + " Orange: " + (player1.time_in_enemy_territory/1000).toFixed(1);
+/*if (timer > 119){
+    game_over = true;
+    if (player2.time_in_enemy_territory > player1.time_in_enemy_territory){winner = 2;}
+    else if (player1.time_in_enemy_territory > player2.time_in_enemy_territory){winner = 1;}
+    }
+*/
+}
+
+var winning_color;
+function endGame(){
+if (keysPressed[82]){r = true;
+console.log(r);}
+if (winner == 1){winning_color = "Orange";}
+if (winner == 2){winning_color = "Green";}
+console.log(player1.time_in_enemy_territory);
+console.log(player2.time_in_enemy_territory);
+console.log(winner);
+score.innerHTML = 'Team ' + highestScoringTeam() + ' Wins! Time: ' + timer;
+//if (winner == 0){score.innerHTML = 'Tie! Time: ' + timer;}
+
+}
+
+</script>
+
+</head>
+<body>
+  <div id="score"/>
+  <div id="capturetheflag" />
+  <div id="other"/>
+<div style = "display:none;">
+</div>
+<!-- <button onclick="toggleSettings()">Settings</button> -->
+<!-- <p id="settings"></p> -->
+</body>
