@@ -3,6 +3,7 @@ var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var path = require('path');
+
 var users = 0;
 var user_numbers = [0];
 var user_ids = [0];
@@ -16,6 +17,11 @@ var player_list = [];
 var C_player_list = [];
 var R_player_list = [];
 var flag_list = [];
+
+app.get('/', function(req, res){
+	  res.sendFile(path.join(__dirname, '/', 'capturetheflag.html'));
+	});
+
 
 class Object{
     constructor(x,y,team,type){
@@ -111,8 +117,10 @@ var initial_score = 10;
 
 var viewWidth = 200;
 var viewHeight = 100;
-
-next_start.x = first_start.x = 100;
+var next_start = {};
+var first_start = {};
+first_start.x = 100;
+next_start.x = 100;
 next_start.y = first_start.y = 100;
 
 var direction = 1;
@@ -342,3 +350,8 @@ newPlayer(number, start.x, start.y);
 });
 
 });
+
+
+http.listen(4000, function(){
+	  console.log('listening on *:4000');
+	});
